@@ -2,7 +2,7 @@ import re
 import time
 
 import scrapy
-
+from urllib.parse import urljoin, urlencode
 from spiders.constants.maksavit import *
 
 
@@ -23,37 +23,41 @@ class MaksavitRuSpider(scrapy.Spider):
             yield scrapy.Request(url=url, cookies=self.cookies, callback=self.parse_pages)
 
     def parse_pages(self, response):
-        page_prefix = "?page="
+        base_url = response.url
         last_page = response.xpath(XPATH_LASTPAGE_NUMBER).get()
         last_page = int(last_page.split('=')[1])
-        url = response.url
-        for page_count in range(last_page + 1):
-            url_page = f'{url}{page_prefix}{page_count}'
-            yield scrapy.Request(url=url_page, cookies=self.cookies, callback=self.parse_category_page)
+        for page_count in range(1, last_page + 1):
+            query_params = urlencode({"page=": page_count})
+            new_url = urljoin(base_url, '?' + query_params)
+            yield scrapy.Request(url=new_url, cookies=self.cookies, callback=self.parse_category_page)
 
     def parse_category_page(self, response):
-        urls = response.xpath(XPATH_URLS_GOODS).getall()
+        urls = response.xpath(XPATH_URLS_PRODUCTS).getall()
         for url in urls:
             url = response.urljoin(url)
             yield scrapy.Request(url, cookies=self.cookies, callback=self.parse)
 
     def get_price_data(self, response):
-        current_price = response.xpath(XPATH_PRICE).get()
-        original_price = response.xpath(XPATH_ORIGINAL_PRICE).get()
-        if current_price:
+        try:
+            current_price = response.xpath(XPATH_CURRENT_PRICE).get()
+            original_price = response.xpath(XPATH_ORIGINAL_PRICE).get()
+
             current_price = int(''.join(re.findall(r'\d+', current_price)))
+            original_price = int(''.join(re.findall(r'\d+', original_price))) if original_price else ''
+
+            sales = 0
+
             if original_price:
-                original_price = int(''.join(re.findall(r'\d+', original_price)))
                 sales = ((original_price - current_price) / original_price) * 100
                 sales = round(sales, 1)
-            else:
-                original_price = ''
-                sales = 0
-        else:
+
+            sales_tag = f"Скидка {sales}%" if sales > 0 else ''
+
+        except TypeError:
             current_price = ''
             original_price = ''
-            sales = 0
-        sales_tag = f"Скидка {sales}%" if sales > 0 else ''
+            sales_tag = ''
+
         price_data = {"current": current_price, "original": original_price, "sale_tag": sales_tag}
         return price_data
 
@@ -61,12 +65,7 @@ class MaksavitRuSpider(scrapy.Spider):
         not_stock = response.xpath(XPATH_STOCK).getall()
         # у товаров, которые отсутствуют в продаже, на странице появляется элемент с текстом "Нет в наличии в вашем городе"
         # у товаров в наличии ничего подобного нет
-        if not_stock:
-            stock = False
-        else:
-            stock = True
-        count = 1 if stock else 0
-        stock = {"in_stock": stock, "count": count}
+        stock = 0 if not_stock else 1
         return stock
 
     def get_metadata(self, response):
@@ -82,8 +81,8 @@ class MaksavitRuSpider(scrapy.Spider):
 
     def parse(self, response):
         main_image = response.urljoin(response.xpath(XPATH_IMAGE).get())
-        brand = response.xpath(XPATH_BRAND).get()
-        brand = brand.strip().split(',')[0] if brand else ''
+        brand = response.xpath(XPATH_BRAND).get() or ''
+        brand = brand.strip().split(',')[0]
         title = response.xpath(XPATH_TITLE).get()
         rpc = response.xpath(XPATH_RPC).get()
         sections = ','.join(response.xpath(XPATH_SECTION).getall()[2:])
