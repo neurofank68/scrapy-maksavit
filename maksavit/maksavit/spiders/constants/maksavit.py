@@ -4,6 +4,8 @@ XPATH_URLS_PRODUCTS = '(//a[contains(@class, "product-card-block__title")])/@hre
 XPATH_CURRENT_PRICE = '//div[contains(@class, "price-info__price")]/span/text()'
 XPATH_ORIGINAL_PRICE = '//div[@class="price-box__old-price"]/text()'
 XPATH_DESCRIPTION = '//div[contains(@class, "ph23")]/p/text()'
+XPATH_ACTIVE_SUBSTANCE = '//a[@class="product-info__mnn-value"]/text()'
+XPATH_RELEASE_FORM = '//div[@class="product-info__form"]/text()'
 XPATH_IMAGE = '//div[contains(@class, "product-picture")]/img/@src'
 XPATH_BRAND = '(//a[@class="product-info__brand-value"]|//div[@class="product-info__brand-value"]|//span[@class="product-info__brand-value"])/text()'
 XPATH_RPC = '//div/@data-product-id'

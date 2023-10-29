@@ -1,8 +1,9 @@
 import re
 import time
+from urllib.parse import urljoin, urlencode
 
 import scrapy
-from urllib.parse import urljoin, urlencode
+
 from spiders.constants.maksavit import *
 
 
@@ -27,7 +28,7 @@ class MaksavitRuSpider(scrapy.Spider):
         last_page = response.xpath(XPATH_LASTPAGE_NUMBER).get()
         last_page = int(last_page.split('=')[1])
         for page_count in range(1, last_page + 1):
-            query_params = urlencode({"page=": page_count})
+            query_params = urlencode({"page": page_count})
             new_url = urljoin(base_url, '?' + query_params)
             yield scrapy.Request(url=new_url, cookies=self.cookies, callback=self.parse_category_page)
 
@@ -43,7 +44,7 @@ class MaksavitRuSpider(scrapy.Spider):
             original_price = response.xpath(XPATH_ORIGINAL_PRICE).get()
 
             current_price = int(''.join(re.findall(r'\d+', current_price)))
-            original_price = int(''.join(re.findall(r'\d+', original_price))) if original_price else ''
+            original_price = int(''.join(re.findall(r'\d+', original_price))) if original_price else 0
 
             sales = 0
 
@@ -51,12 +52,12 @@ class MaksavitRuSpider(scrapy.Spider):
                 sales = ((original_price - current_price) / original_price) * 100
                 sales = round(sales, 1)
 
-            sales_tag = f"Скидка {sales}%" if sales > 0 else ''
+            sales_tag = f"Скидка {sales}%" if sales > 0 else 0
 
         except TypeError:
-            current_price = ''
-            original_price = ''
-            sales_tag = ''
+            current_price = 0
+            original_price = 0
+            sales_tag = 0
 
         price_data = {"current": current_price, "original": original_price, "sale_tag": sales_tag}
         return price_data
@@ -70,22 +71,33 @@ class MaksavitRuSpider(scrapy.Spider):
 
     def get_metadata(self, response):
         description = ','.join(response.xpath(XPATH_DESCRIPTION).getall()) or ''
-        country = response.xpath(XPATH_COUNTRY).get()
-        country = country.split()[-1] if country else ''
+
+        country = response.xpath(XPATH_COUNTRY).get() or ''
+        country = ' '.join(country.split())
+
+        active_substance = response.xpath(XPATH_ACTIVE_SUBSTANCE).get() or ''
+        active_substance = ' '.join(active_substance.split())
+
+        release_form = response.xpath(XPATH_RELEASE_FORM).get() or ''
+        release_form = ' '.join(release_form.split())
 
         metadata = {
-            '__description': description,
-            'СТРАНА ПРОИЗВОДИТЕЛЬ': country
+            'description': description,
+            'country of origin': country,
+            'active substance': active_substance,
+            'release form': release_form
         }
         return metadata
 
     def parse(self, response):
         main_image = response.urljoin(response.xpath(XPATH_IMAGE).get())
+        if main_image == "https://maksavit.ru/":
+            main_image = ''
         brand = response.xpath(XPATH_BRAND).get() or ''
         brand = brand.strip().split(',')[0]
         title = response.xpath(XPATH_TITLE).get()
         rpc = response.xpath(XPATH_RPC).get()
-        sections = ','.join(response.xpath(XPATH_SECTION).getall()[2:])
+        sections = response.xpath(XPATH_SECTION).getall()[2:]
         marketing_tag = response.xpath(XPATH_MARKETING_TAG).get("").strip()
 
         item = {
